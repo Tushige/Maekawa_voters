@@ -25,18 +25,20 @@ class Node:
 		#***
 		self.state = 0
 		self.sock = {}
-
+		self.count = 0
 		#begin receiving connections from other nodes
 		self.start_server()
 		self.start_client()
+		print 'number of threads: ' + str(threading.activeCount())
+		print '[Node %d] '%self.node_id +  str(self.sock.keys())
 	def start_server(self):
 		my_server = threading.Thread(target = self.serverThread, args = ())
 		my_server.start()
 	def start_client(self):
 		#connect to N=9 other nodes
-		for x in range (1, 10):
-			if x is self.node_id or self.sock.has_key(x):
-				#don't connect to yourself
+		for x in range (self.node_id, 10):
+			if x is self.node_id:
+				#don't connect to yourself and nodes already connected
 				continue
 			peer_port = globals.port + x
 			while(globals.nodes[x] == 0):
@@ -48,7 +50,6 @@ class Node:
 				sys.exit();
 
 			self.sock[x].connect((globals.ip, peer_port))
-			#print '[Node %d] Connected to Node_%d\n' %(self.node_id, x)
 
 			self.send_msg("hi " + str(self.node_id), self.sock[x])
 			#start a listening thread
@@ -71,16 +72,11 @@ class Node:
 		s_server.listen(10)
 		while(1):
 			conn, addr = s_server.accept()
-			#check if connection already exists
-			list_socks = self.sock.values()
-			if conn in list_socks:
-				conn.close()
-				continue
-			#print '[Node %d] connected to '%self.node_id + str(addr[1]) + '\n'
 			r_thread = threading.Thread(target = self.recvThread, args = (conn,))
 			r_thread.start()
 	def recvThread(self, conn):
-		while(1):
+		end = 0
+		while(not end):
 			total_data=[]
 			end_idx = 0
 			data = conn.recv(1024)
@@ -108,11 +104,14 @@ class Node:
 					peer_id = int(buf[1])
 					print '[Node %d] Received connection from '%self.node_id + str(peer_id) + '\n'
 					self.sock[peer_id] = conn
-
+					self.count+=1
+					if(self.count == self.node_id - 1):
+						print '[Node %d] '%self.node_id +  str(self.sock.keys())
+						print 'number of threads: ' + str(threading.activeCount())
 		#def threadShouldStop():
 			#returns true when tot_exec_time expires
 		conn.close()
-		s_server.close()
+		#s_server.close()
 
 	def send_msg(self, msg, conn):
 		#print '[Node %d] sending Hi'%self.node_id
