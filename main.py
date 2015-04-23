@@ -33,7 +33,7 @@ def main(argv):
 		nood = threading.Thread(target=create_node, args = (x,globals.cs_int, globals.next_req, globals.tot_exec_time,))
 		nood.start()
 def create_node(node_id, cs_int, next_req, tot_exec_time):
-	my_node = Node(node_id, cs_int, next_req, tot_exec_time)
+	my_node = Node(node_id, cs_int, next_req, tot_exec_time, globals.sets[node_id])
 #execution starts here
 if __name__ == "__main__":
 	print sys.argv

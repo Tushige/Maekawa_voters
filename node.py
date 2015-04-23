@@ -6,17 +6,22 @@ import thread
 import time
 import datetime
 import random
-from collections import deque
+import Queue
+import datetime
 #my imports
 import globals
 
 class Node:
-	def __init__(self, node_id, cs_int, next_req, tot_exec_time):
+	def __init__(self, node_id, cs_int, next_req, tot_exec_time, set):
 		self.node_id = node_id
 		# times 
 		self.cs_int = cs_int
 		self.next_req = next_req
 		self.tot_exec_time = tot_exec_time
+		self.voted = False
+		self.my_set = set
+		self.node_list = [None]*5
+		self.queue = Queue.Queue()
 		#***
 		#0: init
 		#1: Request
@@ -26,20 +31,18 @@ class Node:
 		self.state = 0
 		self.sock = {}
 		self.count = 0
+		self.reply = 0
 		#begin receiving connections from other nodes
 		self.start_server()
 		self.start_client()
-		print 'number of threads: ' + str(threading.activeCount())
-		print '[Node %d] '%self.node_id +  str(self.sock.keys())
+		self.start_algorithm()
+		#print '[Node %d] '%self.node_id +  str(self.sock.keys())
 	def start_server(self):
 		my_server = threading.Thread(target = self.serverThread, args = ())
 		my_server.start()
 	def start_client(self):
 		#connect to N=9 other nodes
 		for x in range (self.node_id, 10):
-			if x is self.node_id:
-				#don't connect to yourself and nodes already connected
-				continue
 			peer_port = globals.port + x
 			while(globals.nodes[x] == 0):
 				pass
@@ -102,20 +105,72 @@ class Node:
 
 				if(buf[0] == "hi"):
 					peer_id = int(buf[1])
-					print '[Node %d] Received connection from '%self.node_id + str(peer_id) + '\n'
+					#print '[Node %d] Received connection from '%self.node_id + str(peer_id) + '\n'
 					self.sock[peer_id] = conn
 					self.count+=1
 					if(self.count == self.node_id - 1):
 						print '[Node %d] '%self.node_id +  str(self.sock.keys())
-						print 'number of threads: ' + str(threading.activeCount())
-		#def threadShouldStop():
-			#returns true when tot_exec_time expires
+		
+				elif(buf[0] == "REQUEST"):
+					if(self.state == 2 or self.voted == True):
+						#queue the message
+						self.queue.put(buf[1])
+					else:
+						self.send_msg("Ya_GOOD "+str(self.node_id), conn)
+						self.voted = True
+				elif(buf[0] == "LEAVING"):
+					self.voted = False
+				elif(buf[0] == "Ya_GOOD"):
+					self.reply +=1
+					print '[Node %d] received %dth reply from %d \n'%(self.node_id, self.reply, int(buf[1]))
+					self.node_list[self.reply-1] = int(buf[1])
 		conn.close()
 		#s_server.close()
 
 	def send_msg(self, msg, conn):
 		#print '[Node %d] sending Hi'%self.node_id
 		conn.sendall('Start'+msg+'End')
+
+	def start_algorithm(self):
+		algo = threading.Thread(target = self.maekawa, args = ())
+		algo.start()
+	def maekawa(self):
+		#delay to allow the network to be setup
+		time.sleep(1.0)
+		print '[Node %d] Imma begin maekawa\n'%self.node_id
+		self.entry()
+	def entry(self):
+		self.state = 1
+		for x in range(1, 10):
+			if(x in self.my_set):
+				self.send_msg("REQUEST " + str(self.node_id), self.sock[x])
+		while(self.reply < 5):
+			pass
+		self.critical_section()
+		self.leave()
+	def critical_section(self):
+		#print '%f %d '%(time.time(), self.node_id) + str(self.node_list) + '\n'
+		print '[Node %d] Entering CS: time:%f set members: '%(self.node_id, time.time()) + str(self.node_list) + '\n'
+		self.state = 2
+		time.sleep(float(self.cs_int))
+	def leave(self):
+		#update flags
+		self.state = 3
+		self.reply = 0
+		print '[Node %d] Leaving CS: time:%f \n'%(self.node_id, time.time())
+		for x in range(1, 10):
+			if(x in self.my_set):
+				self.send_msg("LEAVING " + str(self.node_id), self.sock[x])
+		#check if you have un-replied messages
+		if(not self.queue.empty()):
+			waiting_node = self.queue.get()
+			self.send_msg("Ya_GOOD "+str(self.node_id), self.sock[int(waiting_node)])
+			self.voted = True
+		else:
+			self.voted = False
+
+		time.sleep(float(self.next_req))
+		self.entry()
 
 
 
