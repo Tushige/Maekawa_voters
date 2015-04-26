@@ -22,6 +22,7 @@ class Node:
 		self.my_set = set
 		self.node_list = [None]*5
 		self.queue = Queue.Queue()
+		self.sending_request = False
 		#***
 		#0: init
 		#1: Request
@@ -30,13 +31,12 @@ class Node:
 		#***
 		self.state = 0
 		self.sock = {}
-		self.count = 0
 		self.reply = 0
+		self.timestamp = 0
 		#begin receiving connections from other nodes
 		self.start_server()
 		self.start_client()
 		self.start_algorithm()
-		#print '[Node %d] '%self.node_id +  str(self.sock.keys())
 	def start_server(self):
 		my_server = threading.Thread(target = self.serverThread, args = ())
 		my_server.start()
@@ -54,7 +54,8 @@ class Node:
 
 			self.sock[x].connect((globals.ip, peer_port))
 
-			self.send_msg("hi " + str(self.node_id), self.sock[x])
+			self.timestamp+=1
+			self.send_msg("hi " + str(self.node_id)+' '+str(self.timestamp), self.sock[x])
 			#start a listening thread
 			recv_t = threading.Thread(target= self.recvThread, args = (self.sock[x],))
 			recv_t.start()
@@ -104,28 +105,63 @@ class Node:
 				buf = single_msg.split(' ')
 
 				if(buf[0] == "hi"):
+					self.timestamp = max(self.timestamp+1, int(buf[2]))
 					peer_id = int(buf[1])
-					#print '[Node %d] Received connection from '%self.node_id + str(peer_id) + '\n'
 					self.sock[peer_id] = conn
-					self.count+=1
-					if(self.count == self.node_id - 1):
-						print '[Node %d] '%self.node_id +  str(self.sock.keys())
 		
 				elif(buf[0] == "REQUEST"):
-					if(self.state == 2 or self.voted == True):
-						#queue the message
-						self.queue.put(buf[1])
-					else:
-						self.send_msg("Ya_GOOD "+str(self.node_id), conn)
-						self.voted = True
+					#print '[Node %d] received request from %d and I have voted: %r\n'%(self.node_id, int(buf[1]), self.voted)
+					self.request_handler(int(buf[1]), int(buf[2]))
 				elif(buf[0] == "LEAVING"):
-					self.voted = False
+					self.timestamp = max(self.timestamp+1, int(buf[2]))
+					self.leave_handler()
 				elif(buf[0] == "Ya_GOOD"):
 					self.reply +=1
+					self.timestamp = max(self.timestamp+1, int(buf[2]))
 					print '[Node %d] received %dth reply from %d \n'%(self.node_id, self.reply, int(buf[1]))
 					self.node_list[self.reply-1] = int(buf[1])
 		conn.close()
 		#s_server.close()
+	def request_handler(self, req_id, req_stamp):
+		#don't process others' request until mine has been sent
+		while(self.sending_request == True):
+			pass
+		if(self.state == 2):
+			#queue the message
+			print '[Node %d] queueing request from %d Reason: Im in HELD\n'%(self.node_id, req_id)
+			self.queue.put(req_id)
+			return
+		elif(self.voted == True):
+			#queue the message
+			print '[Node %d] queueing request from %d Reason: I voted already\n'%(self.node_id, req_id)
+			self.queue.put(req_id)
+			return
+		elif(self.state == 1):
+			#I want CS, decide if you respond to yourself or the other
+			if(self.timestamp < req_stamp):
+				#queue the message
+				print '[Node %d] queueing request from %d Reason: Im in REQUEST(1) my timesampt is less\n'%(self.node_id, req_id)
+				self.queue.put(req_id)
+				return
+			elif(self.timestamp == req_stamp and self.node_id < req_id):
+				#queue the message
+				print '[Node %d] queueing request from %d Reason: Im in REQUEST(1) my node_id is less than req_id\n'%(self.node_id, req_id)
+				self.queue.put(req_id)
+				return
+		self.timestamp+=1
+		self.send_msg("Ya_GOOD "+str(self.node_id)+' '+str(self.timestamp), self.sock[req_id])
+		print '[Node %d] voted for %d\n'%(self.node_id, req_id)
+		self.voted = True
+		#update timestamp
+		self.timestamp = max(req_stamp, self.timestamp)
+	def leave_handler(self):
+		self.voted = False
+		#check if you have un-replied messages
+		if(not self.queue.empty()):
+			waiting_node = self.queue.get()
+			self.send_msg("Ya_GOOD "+str(self.node_id) +' '+str(self.timestamp), self.sock[int(waiting_node)])
+			print '[Node %d] voted for %d\n'%(self.node_id, waiting_node)
+			self.voted = True
 
 	def send_msg(self, msg, conn):
 		#print '[Node %d] sending Hi'%self.node_id
@@ -133,41 +169,44 @@ class Node:
 
 	def start_algorithm(self):
 		algo = threading.Thread(target = self.maekawa, args = ())
-		algo.start()
-	def maekawa(self):
-		#delay to allow the network to be setup
 		time.sleep(1.0)
+		algo.start()
+		#print '[Node %d] '%self.node_id +  str(self.sock.keys())
+
+	def maekawa(self):
 		print '[Node %d] Imma begin maekawa\n'%self.node_id
 		self.entry()
+
 	def entry(self):
+		self.sending_request = True
 		self.state = 1
+		self.timestamp+=1
 		for x in range(1, 10):
 			if(x in self.my_set):
-				self.send_msg("REQUEST " + str(self.node_id), self.sock[x])
+				self.send_msg("REQUEST " + str(self.node_id) +' '+str(self.timestamp), self.sock[x])
+		#update my timestamp
+		self.sending_request = False
+		
 		while(self.reply < 5):
 			pass
 		self.critical_section()
 		self.leave()
+
 	def critical_section(self):
-		#print '%f %d '%(time.time(), self.node_id) + str(self.node_list) + '\n'
 		print '[Node %d] Entering CS: time:%f set members: '%(self.node_id, time.time()) + str(self.node_list) + '\n'
 		self.state = 2
 		time.sleep(float(self.cs_int))
+
 	def leave(self):
 		#update flags
 		self.state = 3
 		self.reply = 0
+		self.voted = False
 		print '[Node %d] Leaving CS: time:%f \n'%(self.node_id, time.time())
+		self.timestamp+=1
 		for x in range(1, 10):
 			if(x in self.my_set):
-				self.send_msg("LEAVING " + str(self.node_id), self.sock[x])
-		#check if you have un-replied messages
-		if(not self.queue.empty()):
-			waiting_node = self.queue.get()
-			self.send_msg("Ya_GOOD "+str(self.node_id), self.sock[int(waiting_node)])
-			self.voted = True
-		else:
-			self.voted = False
+				self.send_msg("LEAVING " + str(self.node_id) +' '+str(self.timestamp), self.sock[x])
 
 		time.sleep(float(self.next_req))
 		self.entry()
