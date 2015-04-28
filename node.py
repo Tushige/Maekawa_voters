@@ -36,12 +36,13 @@ class Node:
 		self.granters = ''
 		self.granted = ''
 		self.CS_count = 0
+		self.end = 0
 		#*****
 		#Begin Node setup
 		#*****
 		self.start_server()
 		self.start_client()
-		self.start_algorithm()
+		self.maekawa()
 
 	def start_server(self):
 		my_server = threading.Thread(target = self.serverThread, args = ())
@@ -68,7 +69,6 @@ class Node:
 
 	def serverThread(self):
 		s_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
 		try: #setup server socket
 			s_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 			node_port = globals.port + self.node_id
@@ -79,15 +79,18 @@ class Node:
 			#print '[[ Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1] + ' ]]'
 			sys.exit()
 		s_server.listen(10)
-		while(1):
+		while(not self.end):
 			conn, addr = s_server.accept()
 			r_thread = threading.Thread(target = self.recvThread, args = (conn,))
 			r_thread.start()
+		s_server.close()
 
 	def recvThread(self, conn):
-		end = 0
-		while(not end):
-			data = conn.recv(1024)
+		while(not self.end):
+			try:
+				data = conn.recv(1024)
+			except:
+				continue
 			if len(data) == 0:
 				continue
 			while data[-1] != '\n':
@@ -145,7 +148,6 @@ class Node:
 					self.failed_count+=1
 					#print '[Node %d] received Failed from %d\n'%(self.node_id, int(buf[1]))
 		conn.close()
-		#s_server.close()
 
 	def request_handler(self, req_id, req_stamp):
 		#don't process others' request until mine has been sent
@@ -217,12 +219,15 @@ class Node:
 
 	def send_msg(self, msg, conn):
 		#print '[Node %d] sending Hi'%self.node_id
-		conn.sendall(msg+'\n')
+		if(conn != None):
+			conn.sendall(msg+'\n')
+		else:
+			print '*********############WHOAAAA##########**********\n'
 	def update(self):
 		for x in range(1,len(self.sock)+1):
 			self.send_msg("update " + str(self.timestamp), self.sock[x])
 
-	def start_algorithm(self):
+	def maekawa(self):
 		#delay to allow connections to be setup
 		time.sleep(2.0)
 		
@@ -230,11 +235,16 @@ class Node:
 		self.timestamp = 0
 		upd_t = threading.Thread(target = self.update, args = ())
 		upd_t.start()
-		algo = threading.Thread(target = self.maekawa, args = ())
+		algo = threading.Thread(target = self.entry, args = ())
 		algo.start()
+		algo.join(float(self.tot_exec_time))
+		while(self.state == 2):
+			pass
+		self.end = 1
+		globals.end = 1
+		print '***********[Node %d] Quit***********\n'%self.node_id
 
-	def maekawa(self):
-		self.entry()
+		sys.exit()
 
 	def entry(self):
 		self.sending_request = True
@@ -269,10 +279,11 @@ class Node:
 		self.timestamp+=1
 		send_stamp = self.timestamp
 		for x in range(1, 10):
-			if(x in self.my_set):
+			if x in self.my_set and self.end == 0:
 				self.send_msg("LEAVING " + str(self.node_id) +' '+str(send_stamp), self.sock[x])
 		time.sleep(float(self.next_req))
-		self.entry()
+		if(not self.end):
+			self.entry()
 
 	def show(self):
 		print '[Node %d] '%self.node_id + self.granters + '\n'

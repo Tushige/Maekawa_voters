@@ -2,7 +2,7 @@
 import node
 
 def init():
-	global cs_init, next_req, tot_exec_time, ip, port, nodes, sets
+	global cs_init, next_req, tot_exec_time, ip, port, nodes, sets, end
 
 	cs_int = None
 	next_req = None
@@ -22,4 +22,4 @@ def init():
 		8: [2, 5, 7, 8, 9],
 		9: [3, 6, 7, 8, 9]
 	}
-	#file = open("output", 'w')
+	end = 0
