@@ -13,6 +13,7 @@ from collections import deque
 from node import Node
 import globals
 
+global node_obj
 node_obj = [None] * 15
 
 def main(argv):
@@ -28,7 +29,7 @@ def main(argv):
 	globals.cs_int = argv[0]
 	globals.next_req = argv[1]
 	globals.tot_exec_time = argv[2]
-	#user_input()
+	user_input()
 
 	#spawn N=9 nodes
 	for x in range(1,10):
@@ -36,25 +37,24 @@ def main(argv):
 		nood.start()
 
 def create_node(node_id, cs_int, next_req, tot_exec_time):
-	global node_obj
 	my_node = Node(node_id, cs_int, next_req, tot_exec_time, globals.sets[node_id])
-	node_obj[node_id] = my_node
-#def user_input():
-	#cmda = threading.Thread(target = gimme, args = ())
-	#cmda.start()
 
-#def gimme():
-#	global node_obj
-#	while(1):
-#		if globals.end:
-#			break
-#		userInput = raw_input('>>> ')
-#		cmd = userInput.split(' ')
-#		if cmd[0] == "show" :
-#			for x in range(1, 10):
-#				node_obj[x].show()
-#	print 'OUT\n'
-#	sys.exit()
+def user_input():
+	cmda = threading.Thread(target = gimme, args = ())
+	cmda.start()
+
+def gimme():
+	while(1):
+		userInput = raw_input('>>> ')
+		cmd = userInput.split(' ')
+		if cmd[0] == "show" :
+			for x in range(1, 10):
+				try:
+					globals.node_obj[x].show()
+				except:
+					print globals.node_obj
+	print 'OUT\n'
+	sys.exit()
 
 #execution starts here
 if __name__ == "__main__":

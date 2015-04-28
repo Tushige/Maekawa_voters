@@ -40,6 +40,10 @@ class Node:
 		#*****
 		#Begin Node setup
 		#*****
+		try:
+			globals.node_obj[self.node_id] = self
+		except:
+			print self.node_id
 		self.start_server()
 		self.start_client()
 		self.maekawa()
@@ -90,6 +94,7 @@ class Node:
 			try:
 				data = conn.recv(1024)
 			except:
+				print '[NODE %d]**********OMG WHAT THE!!!*************'%self.node_id
 				continue
 			if len(data) == 0:
 				continue
@@ -108,11 +113,13 @@ class Node:
 					self.timestamp = max(self.timestamp+1, int(buf[1])+1)
 		
 				elif(buf[0] == "REQUEST"):
+					#print '[Node %d] received request to enter CS\n'%self.node_id
 					self.timestamp = max(self.timestamp+1, int(buf[2])+1)
 
 					self.lock.acquire()
 					self.request_handler(int(buf[1]), int(buf[2]))
 					self.lock.release()
+					#print '[Node %d] fulfilled request\n'%self.node_id
 
 				elif(buf[0] == "LEAVING"):
 					self.timestamp = max(self.timestamp+1, int(buf[2])+1)
@@ -202,6 +209,8 @@ class Node:
 			#remove voter from list of granters
 			self.granters = self.granters[0:remove_idx] + self.granters[remove_idx+2:len(self.granters)]
 			return
+		else:
+			print '[Node %d] i\'m NOT yielding to %d by node %d\'s request\n'%(self.node_id,replacement, voter)
 
 	def yield_handler(self, yielder, yielder_stamp):
 		if(not self.pending.empty()):
@@ -209,13 +218,13 @@ class Node:
 			self.pending.task_done()
 			self.timestamp+=1
 			self.send_msg("grant_yielded "+str(self.node_id) +' '+str(self.timestamp), self.sock[int(waiting_node[1])])
-			#print '[Node %d] received yield from %d, now replying to %d \n'%(self.node_id, yielder, waiting_node[1])
-			#put the yielded node back on the queue
-			self.pending.put((yielder_stamp,yielder))
 			self.voted = True
 			self.granted = str(waiting_node[1])
 			self.my_choice['timestamp'] = waiting_node[0]
 			self.my_choice['id'] = waiting_node[1]
+			print '[Node %d] received yield from %d, now replying to %d \n'%(self.node_id, yielder, waiting_node[1])
+			#put the yielded node back on the queue
+			self.pending.put((yielder_stamp,yielder))
 
 	def send_msg(self, msg, conn):
 		#print '[Node %d] sending Hi'%self.node_id
@@ -229,8 +238,8 @@ class Node:
 
 	def maekawa(self):
 		#delay to allow connections to be setup
-		time.sleep(2.0)
-		
+		while len(self.sock) < 9:
+			pass
 		#start clean after network is setup
 		self.timestamp = 0
 		upd_t = threading.Thread(target = self.update, args = ())
@@ -253,7 +262,7 @@ class Node:
 		self.send_stamp = self.timestamp
 		print '[Node %d] Requesting Entry with timestamp %d from '%(self.node_id, self.send_stamp) + str(globals.sets[self.node_id]) + '\n'
 		for x in range(1, 10):
-			if(x in self.my_set):
+			if x in self.my_set:
 				self.send_msg("REQUEST " + str(self.node_id) +' '+str(self.send_stamp), self.sock[x])
 		#update my timestamp
 		self.sending_request = False
