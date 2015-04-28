@@ -35,6 +35,7 @@ class Node:
 		self.failed_count = 0
 		self.granters = ''
 		self.granted = ''
+		self.CS_count = 0
 		#*****
 		#Begin Node setup
 		#*****
@@ -253,7 +254,8 @@ class Node:
 		self.leave()
 
 	def critical_section(self):
-		print '[Node %d] Entering CS: time:[%f] voters: [%s] voted: [%s]'%(self.node_id, time.time(), self.granters, self.granted) + '\n'
+		print '[Node %d] Entering CS: %d time:[%f] voters: [%s] voted: [%s]'%(self.node_id, self.CS_count, time.time(), self.granters, self.granted) + '\n'
+		self.CS_count +=1
 		self.state = 2
 		time.sleep(float(self.cs_int))
 
