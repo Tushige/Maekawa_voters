@@ -1,0 +1,21 @@
+		
+Voting Sets:
+	- The voting set was taken from creating a 3x3 matrix consisting of the node ids. A node's set consists of the nodes in the intersecting row and column
+	1: [1, 2, 3, 4, 7]
+	2: [1, 2, 3, 5, 8]
+	3: [1, 2, 3, 6, 9]
+	4: [1, 4, 5, 6, 7]
+	5: [2, 4, 5, 6, 8]
+	6: [3, 4, 5, 6, 9]
+	7: [1, 4, 7, 8, 9]
+	8: [2, 5, 7, 8, 9]
+	9: [3, 6, 7, 8, 9]
+
+Deadlock Avoidance:
+
+	In order to avoid deadlocks, the use of timestamp was employed in addition to using "Inquire", "Yield" and "failed" messages.
+
+	Whenever a node receives a request with higher priority than the request it already responded to, then it sends an "inquire" message to the voted node as an attempt to take its vote back.
+	The voted node will "yield"/return the vote if it has received any "failed" messages from the other voters. 
+	Also, the voted node will yield its vote if the replacing node has a lower timestamp or lower id if they have equal timestamps.
+	All the un-responded requests are queued and responded to later.
